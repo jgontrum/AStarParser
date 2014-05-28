@@ -9,8 +9,10 @@ package de.up.ling.stud.astar;
 import de.up.ling.stud.astar.pcfg.Pcfg;
 import de.up.ling.stud.astar.pcfg.Rule;
 import de.up.ling.stud.astar.pcfg.Signature;
+import de.up.ling.tree.Tree;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
@@ -24,7 +26,7 @@ public class astarParser {
     PriorityQueue<ParseItem> agenda;
     Int2ObjectMap<Set<ParseItem>> seenItemsByEndPosition;
     Set<ParseItem> workingSet;
-    Signature signature;
+    Signature<String> signature;
     
     private void enqueue(ParseItem item) {
         agenda.offer(item);
@@ -35,7 +37,7 @@ public class astarParser {
         workingSet.forEach((item) -> { seenItemsByEndPosition.get(item.getEnd()).add(item); });
     }
     
-    public boolean parse(List<String> words, Pcfg pcfg) {
+    public Tree parse(List<String> words, Pcfg pcfg) {
         /*
             Set up variables
          */
@@ -64,7 +66,7 @@ public class astarParser {
             rhs[0] = signature.addSymbol(words.get(i));
             
             for (Rule r : pcfg.getRules(rhs)) {
-                enqueue(new ParseItem(r.getLhs(), i, i+1));
+                enqueue(new ParseItem(r.getLhs(), i, i+1, null, null));
             }
     
         }
@@ -85,27 +87,48 @@ public class astarParser {
                 rhs[1] = item.getSymbol();
                 
                 pcfg.getRules(rhs).stream().forEach((r) -> {
-                    System.err.println("New Item: " + new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd()).toStringReadable(signature));
-                    enqueue(new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd()));
+                    System.err.println("New Item: " + new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd(), null, null).toStringReadable(signature));
+                    enqueue(new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item));
                 });
             });
             
         }
         
+        for (ParseItem finalItem : seenItemsByEndPosition.get(n)) {
+            if (finalItem.getEnd() == n && finalItem.getBegin() == 0 && finalItem.getSymbol() == pcfg.getStartSymbol()) {
+                return createParseTree(finalItem);
+            }
+        }
+        return null;
+    }
+    
+    private Tree createParseTree(ParseItem item) {
+        List<Tree<String>> children = new ArrayList<>();
         
+        ParseItem child1 = item.getFirstChild();
+        ParseItem child2 = item.getSecondChild();
         
-        return seenItemsByEndPosition.get(n).contains(new ParseItem(pcfg.getStartSymbol(),0,n));
+        if (child1 != null && child2 != null) {
+            children.add(createParseTree(child1));
+            children.add(createParseTree(child2));
+        }
+        return Tree.create(signature.getSymbolForId(item.getSymbol()), children);
     }
     
     static private class ParseItem {
         int symbol;
         int begin;
         int end;
+        ParseItem[] childs;
+        
 
-        public ParseItem(int symbol, int begin, int end) {
+        public ParseItem(int symbol, int begin, int end, ParseItem child1, ParseItem child2) {
             this.symbol = symbol;
             this.begin = begin;
             this.end = end;
+            childs = new ParseItem[2];
+            childs[0] = child1;
+            childs[1] = child2;
         }
 
         public int getLength() {
@@ -122,6 +145,14 @@ public class astarParser {
 
         public int getEnd() {
             return end;
+        }
+        
+        public ParseItem getFirstChild() { 
+            return childs[0];
+        }
+        
+        public ParseItem getSecondChild() {
+            return childs[1];
         }
         
         @Override
@@ -160,7 +191,7 @@ public class astarParser {
         }
         
         public String toStringReadable(Signature signature) {
-            return "<" + signature.getSymbolForId(symbol) + "," + begin + "," + end + ">";
+            return "<" + signature.getSymbolForId(symbol) + "," + begin + "," + end + ">()";
         }
         
         

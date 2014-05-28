@@ -8,11 +8,65 @@
   <name>AstarParser</name>
   <url>http://maven.apache.org</url>
   <dependencies>
+      <dependency>
+          <groupId>de.saar.coli</groupId>
+          <artifactId>basics</artifactId>
+          <version>1.2.30</version>
+         <type>jar</type>
+      </dependency>
+      
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>3.8.1</version>
       <scope>test</scope>
     </dependency>
+    
+    <dependency>
+        <groupId>it.unimi.dsi</groupId>
+        <artifactId>fastutil</artifactId>
+        <version>6.5.6</version>
+    </dependency>
   </dependencies>
+  
+    <build>
+
+        <plugins>
+      
+      <plugin>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>javacc-maven-plugin</artifactId>
+      <version>2.6</version>
+      <executions>
+          <execution>
+              <id>javacc</id>
+              <goals>
+                  <goal>javacc</goal>
+              </goals>
+          </execution>
+      </executions>
+  </plugin>
+      
+  </plugins>
+    </build>
+
+  
+  
+  <repositories>
+  <repository>
+      <id>ecl-releases</id>
+      <name>ECL releases</name>
+      <url>http://www.coli.uni-saarland.de/projects/ecl/maven2/releases</url>
+      <releases>
+          <enabled>true</enabled>
+      </releases>
+      <snapshots>
+          <enabled>true</enabled>
+      </snapshots>
+  </repository>
+</repositories>
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+    </properties>
 </project>
