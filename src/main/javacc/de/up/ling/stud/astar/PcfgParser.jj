@@ -1,0 +1,125 @@
+/**
+ * JavaCC file
+ */
+
+
+options {
+  JDK_VERSION = "1.5";
+  STATIC = false;
+  LOOKAHEAD=2; // speed up parser by removing this and fixing choice conflict in ctt() differently
+  FORCE_LA_CHECK=true;
+}
+PARSER_BEGIN(PcfgParser)
+package de.up.ling.stud.astar.pcfg;
+
+import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.*;
+import java.io.*;
+
+
+/**
+ * Parser for PCFGs
+ * @author Alexander Koller, modified by johannes for modified pcfg with ints as internal values.
+ */
+public class PcfgParser {
+    private Pcfg pcfg = new Pcfg();
+
+//    private static PcfgParser parser = new PcfgParser(new ByteArrayInputStream(new byte[]{}));
+
+
+    public static Pcfg parse(Reader reader) throws ParseException {
+        try {
+            PcfgParser parser = new PcfgParser(new ByteArrayInputStream(new byte[]{}));
+            parser.ReInit(reader);
+
+            parser.grammar();
+            return parser.pcfg;
+        } catch(Exception e) {
+            throw new ParseException("Unexpected parsing error: " + e.toString());
+        }
+    }
+}
+PARSER_END(PcfgParser)
+
+SKIP : { <"/*">: INSIDE_COMMENT |  " " | "\t" | "\r" | "\n" }
+<INSIDE_COMMENT>
+SKIP: { <"*/">: DEFAULT | <~[]> }
+
+TOKEN :
+{
+    <ARROW: "->"> |
+    <QUOTED_NAME: "\'" (~["\'"])* "\'"> |
+    <DOUBLE_QUOTED_NAME: "\"" (~["\""])* "\""> |    
+    < NAME:    (~ ["[", "\t", " ", "\r", "\n"]) + > |
+    <BRACK_NUMBER :  "[" ["0"-"9", "."] (["0"-"9", ".", "e", "E", "-"])* "]" > 
+}
+
+void grammar() :
+{
+}
+{
+    StartSymbol() (Rule())+
+}
+
+void StartSymbol() :
+{
+  String sym;
+}{
+    sym = name() { 
+        pcfg.setStringStartSymbol(sym); 
+    }
+}
+
+
+
+void Rule() :
+{
+    String label = null;
+    List<String> rhs = null;
+    String lhs = null;
+    double prob;
+}
+{
+    lhs=name() <ARROW> rhs=NtList() prob=probToken() {
+      pcfg.addStringRuleToSignature(lhs, rhs, prob);
+    }
+}
+
+double probToken() : 
+{
+  Token tok;
+}{
+  tok=<BRACK_NUMBER> {
+      try {
+        return Double.parseDouble(tok.image.substring(1, tok.image.length()-1));
+      } catch(NumberFormatException e) {
+        System.err.println("Warning: invalid probability " + tok.image + " interpreted as zero.");
+        return 0.0;
+      }    
+  }
+}
+
+String name() :
+{
+    Token tok;
+}
+{
+    
+    tok = <QUOTED_NAME> { return tok.image.substring(1, tok.image.length()-1); }
+    | tok = <DOUBLE_QUOTED_NAME> { return tok.image.substring(1, tok.image.length()-1); }
+    | tok = <NAME> { return tok.image; }
+}
+
+
+List<String> NtList() :
+{
+  List<String> ret = new ArrayList<String>();
+  String x;
+}
+{
+   ( (x = name() { ret.add(x); }) +  ) { return ret; }
+}
+
+
