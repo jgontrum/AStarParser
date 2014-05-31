@@ -34,7 +34,15 @@ public class astarParser {
     }
     
     private void flush() {
-        workingSet.forEach((item) -> { seenItemsByEndPosition.get(item.getEnd()).add(item); });
+        for (ParseItem item : workingSet) {
+            if (seenItemsByEndPosition.containsKey(item.getEnd())) {
+                seenItemsByEndPosition.get(item.getEnd()).add(item);
+            } else {
+                Set<ParseItem> insert = new HashSet<>();
+                insert.add(item);
+                seenItemsByEndPosition.put(item.getEnd(), insert);
+            }
+        }
     }
     
     public Tree parse(List<String> words, Pcfg pcfg) {
@@ -42,9 +50,9 @@ public class astarParser {
             Set up variables
          */
         agenda = new PriorityQueue<>(100, 
-                (ParseItem elem1, ParseItem elem2) -> (elem1.getLength() == elem2.getLength()) 
+                (ParseItem elem1, ParseItem elem2) -> (elem1.getWeight() == elem2.getWeight()) 
                 ? 0             // elements are equal
-                : (elem1.getLength() < elem2.getLength()
+                : (elem1.getWeight() < elem2.getWeight()
                         ? 0             // elem1 is smaller
                         : 1));
         
@@ -63,7 +71,9 @@ public class astarParser {
         
         for (int i = 0; i < n; i++) {
             int[] rhs = new int[1];
-            rhs[0] = signature.addSymbol(words.get(i));
+            rhs[0] = signature.getIdforSymbol(words.get(i));
+            
+            System.err.println(words.get(i));
             
             for (Rule r : pcfg.getRules(rhs)) {
                 enqueue(new ParseItem(r.getLhs(), i, i+1, null, null));
@@ -78,16 +88,19 @@ public class astarParser {
         while (!agenda.isEmpty()) {
             flush();
             ParseItem item = agenda.poll();
-            System.err.println("Current Item: " + item.toStringReadable(signature));
+//            System.err.println("Current Item: " + item.toStringReadable(signature));
             
             
             seenItemsByEndPosition.get(item.getBegin()).stream().forEach((candidate) -> {
+
                 int[] rhs = new int[2];
                 rhs[0] = candidate.getSymbol();
                 rhs[1] = item.getSymbol();
                 
                 pcfg.getRules(rhs).stream().forEach((r) -> {
-                    System.err.println("New Item: " + new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd(), null, null).toStringReadable(signature));
+                    System.err.println(candidate.toStringReadable(signature));
+                    System.err.println(item.toStringReadable(signature) + "\n->");
+                    System.err.println(new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item).toStringReadable(signature) + "\n");
                     enqueue(new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item));
                 });
             });
@@ -95,10 +108,12 @@ public class astarParser {
         }
         
         for (ParseItem finalItem : seenItemsByEndPosition.get(n)) {
+            System.err.println(finalItem.toStringReadable(signature));
             if (finalItem.getEnd() == n && finalItem.getBegin() == 0 && finalItem.getSymbol() == pcfg.getStartSymbol()) {
                 return createParseTree(finalItem);
             }
         }
+        
         return null;
     }
     
@@ -145,6 +160,10 @@ public class astarParser {
 
         public int getEnd() {
             return end;
+        }
+        
+        public int getWeight() {
+            return getLength();
         }
         
         public ParseItem getFirstChild() { 

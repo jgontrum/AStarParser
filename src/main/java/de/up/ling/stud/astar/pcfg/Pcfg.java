@@ -26,6 +26,8 @@ public class Pcfg {
     private final IntSet nonTerminals;
     private final Int2ObjectMap<Set<Rule>> lhsToRule;
     private final Int2ObjectMap<Set<Rule>> hashedRhs;
+    private final Int2ObjectMap<Set<Rule>> firstRhsSymbolToRules;
+    private final Int2ObjectMap<Set<Rule>> secondRhsSymbolToRules;
     private int numberOfRulesInTrie;
     private boolean cnf;
     private int start;
@@ -38,6 +40,8 @@ public class Pcfg {
         nonTerminals = new IntOpenHashSet();
         lhsToRule = new Int2ObjectOpenHashMap<Set<Rule>>();
         hashedRhs = new Int2ObjectOpenHashMap<Set<Rule>>();
+        firstRhsSymbolToRules = new Int2ObjectOpenHashMap<>();
+        secondRhsSymbolToRules = new Int2ObjectOpenHashMap<>();
         numberOfRulesInTrie = 0;
         cnf = true;
         initialized = false;
@@ -54,7 +58,11 @@ public class Pcfg {
         int lhsId = signature.addSymbol(lhs);
         int[] rhsId = new int [rhs.size()];
         for (int i = 0; i < rhs.size(); i++) {
-            rhsId[i] = signature.addSymbol(rhs.get(i));
+            if (rhs.get(i).length() > 2 &&  rhs.get(i).startsWith("+") && rhs.get(i).endsWith("+")) {
+                rhsId[i] = signature.addSymbol(rhs.get(i).substring(1, rhs.get(i).length()-1));
+            } else {
+                rhsId[i] = signature.addSymbol(rhs.get(i));
+            }
         }
         Rule intRule = new Rule(lhsId, rhsId, prob);
         addRule(intRule);
@@ -87,7 +95,34 @@ public class Pcfg {
     }
    
     public void initialize() {
-        postProcessing();
+        initialized = true;
+        ruleList.stream().forEach((r) -> {
+            ruleTrie.put(r.getRhs(), r);
+            if (r.getRhs().length == 2){
+                int first = r.getRhs()[0];
+                int second = r.getRhs()[1];
+                
+                Set<Rule> firstRules = firstRhsSymbolToRules.get(first);
+                Set<Rule> secondRules = secondRhsSymbolToRules.get(second);                
+                
+                if (firstRules == null) {
+                    firstRules = new HashSet<Rule>();
+                    firstRules.add(r);
+                    firstRhsSymbolToRules.put(first, firstRules);
+                } else {
+                    firstRules.add(r);
+                }
+                
+                if (secondRules == null) {
+                    secondRules = new HashSet<Rule>();
+                    secondRules.add(r);
+                    secondRhsSymbolToRules.put(second, secondRules);
+                } else {
+                    secondRules.add(r);
+                }
+
+            }
+        });
     }
     
     /**
@@ -301,6 +336,28 @@ public class Pcfg {
             return new HashSet<Rule>();
         }
     }
+    
+    public Collection<Rule> getRulesForFirstRhsSymbol(int rhs1) {
+        if (!initialized) {
+            initialize();
+        }
+        Collection<Rule> ret = firstRhsSymbolToRules.get(rhs1);
+        if (ret == null) return new HashSet<>();
+        else return ret;
+    }
+    
+    public Collection<Rule> getRulesForSecondRhsSymbol(int rhs2) {
+        if (!initialized) {
+            initialize();
+        }
+        Collection<Rule> ret = secondRhsSymbolToRules.get(rhs2);
+        if (ret == null) {
+            return new HashSet<>();
+        } else {
+            return ret;
+        }
+    }
+
     
     /**
      * Returns a Trie, that stores the information for all symbols 
