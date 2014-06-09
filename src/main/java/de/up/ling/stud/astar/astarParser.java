@@ -23,24 +23,39 @@ import java.util.Set;
  * @author gontrum
  */
 public class astarParser {
-    PriorityQueue<ParseItem> agenda;
-    Int2ObjectMap<Set<ParseItem>> seenItemsByEndPosition;
-    Set<ParseItem> workingSet;
+    PriorityQueue<Edge> agenda;
+    Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;
+    Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;
+    Set<Edge> workingSet;
     Signature<String> signature;
     
-    private void enqueue(ParseItem item) {
+    private void enqueue(Edge item) {
         agenda.offer(item);
         workingSet.add(item);
     }
     
-    private void flush() {
-        for (ParseItem item : workingSet) {
+    private Edge poll() {
+        return agenda.poll();
+    }
+    
+    // Save items from a temporary set to the maps
+    private void flush() { 
+        for (Edge item : workingSet) {
+            // Save by end
             if (seenItemsByEndPosition.containsKey(item.getEnd())) {
                 seenItemsByEndPosition.get(item.getEnd()).add(item);
             } else {
-                Set<ParseItem> insert = new HashSet<>();
+                Set<Edge> insert = new HashSet<>();
                 insert.add(item);
                 seenItemsByEndPosition.put(item.getEnd(), insert);
+            }
+            // Save by start
+            if (seenItemsByStartPosition.containsKey(item.getBegin())) {
+                seenItemsByStartPosition.get(item.getBegin()).add(item);
+            } else {
+                Set<Edge> insert = new HashSet<>();
+                insert.add(item);
+                seenItemsByStartPosition.put(item.getBegin(), insert);
             }
         }
     }
@@ -50,7 +65,7 @@ public class astarParser {
             Set up variables
          */
         agenda = new PriorityQueue<>(100, 
-                (ParseItem elem1, ParseItem elem2) -> (elem1.getWeight() == elem2.getWeight()) 
+                (Edge elem1, Edge elem2) -> (elem1.getWeight() == elem2.getWeight()) 
                 ? 0             // elements are equal
                 : (elem1.getWeight() < elem2.getWeight()
                         ? 0             // elem1 is smaller
@@ -58,6 +73,8 @@ public class astarParser {
         
         seenItemsByEndPosition = new Int2ObjectOpenHashMap<>();
         seenItemsByEndPosition.defaultReturnValue(new HashSet<>());
+        seenItemsByStartPosition = new Int2ObjectOpenHashMap<>();
+        seenItemsByStartPosition.defaultReturnValue(new HashSet<>());
         
         workingSet = new HashSet<>();
         
@@ -73,10 +90,11 @@ public class astarParser {
             int[] rhs = new int[1];
             rhs[0] = signature.getIdforSymbol(words.get(i));
             
-            System.err.println(words.get(i));
+//            System.err.println(words.get(i));
             
             for (Rule r : pcfg.getRules(rhs)) {
-                enqueue(new ParseItem(r.getLhs(), i, i+1, null, null));
+//                System.err.println("-> " +r.getLhs());
+                enqueue(new Edge(r.getLhs(), i, i+1, null, null));
             }
     
         }
@@ -84,31 +102,40 @@ public class astarParser {
         /*
             Main loop
          */
-        
-        while (!agenda.isEmpty()) {
+        int edgeCounter = 0;
+        while (!agenda.isEmpty()) { 
+            ++edgeCounter;
             flush();
-            ParseItem item = agenda.poll();
+            Edge item = poll();
 //            System.err.println("Current Item: " + item.toStringReadable(signature));
             
-            
             seenItemsByEndPosition.get(item.getBegin()).stream().forEach((candidate) -> {
-
                 int[] rhs = new int[2];
                 rhs[0] = candidate.getSymbol();
                 rhs[1] = item.getSymbol();
                 
                 pcfg.getRules(rhs).stream().forEach((r) -> {
-                    System.err.println(candidate.toStringReadable(signature));
-                    System.err.println(item.toStringReadable(signature) + "\n->");
-                    System.err.println(new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item).toStringReadable(signature) + "\n");
-                    enqueue(new ParseItem(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item));
+                    enqueue(new Edge(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item));
+                });
+            });
+            
+            seenItemsByStartPosition.get(item.getEnd()).stream().forEach((candidate) -> {
+                int[] rhs = new int[2];
+                rhs[0] = item.getSymbol();
+                rhs[1] = candidate.getSymbol();
+
+                pcfg.getRules(rhs).stream().forEach((r) -> {
+                    enqueue(new Edge(r.getLhs(), item.getBegin(), candidate.getEnd(), item, candidate));
                 });
             });
             
         }
         
-        for (ParseItem finalItem : seenItemsByEndPosition.get(n)) {
-            System.err.println(finalItem.toStringReadable(signature));
+        System.err.println("Edges: " + edgeCounter);
+        
+        
+        // Find final item and create a parse tree
+        for (Edge finalItem : seenItemsByEndPosition.get(n)) {
             if (finalItem.getEnd() == n && finalItem.getBegin() == 0 && finalItem.getSymbol() == pcfg.getStartSymbol()) {
                 return createParseTree(finalItem);
             }
@@ -116,12 +143,13 @@ public class astarParser {
         
         return null;
     }
+
     
-    private Tree createParseTree(ParseItem item) {
+    private Tree createParseTree(Edge item) {
         List<Tree<String>> children = new ArrayList<>();
         
-        ParseItem child1 = item.getFirstChild();
-        ParseItem child2 = item.getSecondChild();
+        Edge child1 = item.getFirstChild();
+        Edge child2 = item.getSecondChild();
         
         if (child1 != null && child2 != null) {
             children.add(createParseTree(child1));
@@ -130,18 +158,18 @@ public class astarParser {
         return Tree.create(signature.getSymbolForId(item.getSymbol()), children);
     }
     
-    static private class ParseItem {
+    static private class Edge {
         int symbol;
         int begin;
         int end;
-        ParseItem[] childs;
+        Edge[] childs;
         
 
-        public ParseItem(int symbol, int begin, int end, ParseItem child1, ParseItem child2) {
+        public Edge(int symbol, int begin, int end, Edge child1, Edge child2) {
             this.symbol = symbol;
             this.begin = begin;
             this.end = end;
-            childs = new ParseItem[2];
+            childs = new Edge[2];
             childs[0] = child1;
             childs[1] = child2;
         }
@@ -166,11 +194,11 @@ public class astarParser {
             return getLength();
         }
         
-        public ParseItem getFirstChild() { 
+        public Edge getFirstChild() { 
             return childs[0];
         }
         
-        public ParseItem getSecondChild() {
+        public Edge getSecondChild() {
             return childs[1];
         }
         
@@ -191,7 +219,7 @@ public class astarParser {
             if (getClass() != obj.getClass()) {
                 return false;
             }
-            final ParseItem other = (ParseItem) obj;
+            final Edge other = (Edge) obj;
             if (this.symbol != other.symbol) {
                 return false;
             }
