@@ -30,22 +30,14 @@ public class App
                 + "V -> mag [1]\n"
                 + "VP -> V NP [1]";
         
-//        grammar = "S\n" +
-//                "S -> A B [1]\n" +
-//                "A -> C D [1]\n" +
-//                "C -> a [1]\n" +
-//                "D -> b [1]\n" +
-//                "B -> c [1]";
 
         Pcfg pcfg;
         pcfg = PcfgParser.parse(new StringReader(grammar));
-//        pcfg = PcfgParser.parse(new FileReader(new File("grammar.txt")));
+        pcfg = PcfgParser.parse(new FileReader(new File("grammar.txt")));
         
         String sentence;
         sentence = "Hans mag den Baum";
-//        sentence = "a b c";
-//        sentence = "The market crumbled . DOL";
-//        sentence = "No , it , was n't Black Monday . DOL";
+        sentence = "The market crumbled . @";
         
         StringTokenizer tokenizer = new StringTokenizer(sentence);
         List<String> inputWord = new ArrayList();
@@ -56,16 +48,16 @@ public class App
             wordsDecoded.add(pcfg.getSignature().addSymbol(currentWord));
         }
         System.err.println(inputWord);
+//
+//        InsideOutsideTools iot = new InsideOutsideTools(pcfg, wordsDecoded);
+//        
+//        System.err.println(iot.inside(pcfg.getStartSymbol(), 0, wordsDecoded.size() -1 ));
+//        wordsDecoded.rem(0);
+//                wordsDecoded.rem(0);
+//
+//        System.err.println(iot.outside(pcfg.getSignature().getIdforSymbol("VP"), 1, wordsDecoded.size() - 1));
 
-        InsideOutsideTools iot = new InsideOutsideTools(pcfg, wordsDecoded);
-        
-        System.err.println(iot.inside(pcfg.getStartSymbol(), 0, wordsDecoded.size() -1 ));
-        wordsDecoded.rem(0);
-                wordsDecoded.rem(0);
-
-        System.err.println(iot.outside(pcfg.getSignature().getIdforSymbol("NP"), 2, wordsDecoded.size() - 1));
-
-//        astarParser parser = new astarParser();    
-//        System.err.println(parser.parse(inputWord, pcfg));
+        astarParser parser = new astarParser();    
+        System.err.println(parser.parse(inputWord, pcfg));
     }
 }

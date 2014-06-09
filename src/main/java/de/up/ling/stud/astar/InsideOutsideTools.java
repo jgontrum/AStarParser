@@ -34,6 +34,7 @@ public class InsideOutsideTools {
         this.sig = grammar.getSignature();
     }
     
+    
     public double inside(int symbol, int start, int end) {
        
         if (start == end) { // base case
@@ -99,7 +100,10 @@ public class InsideOutsideTools {
                         double outside = outside(rule.getLhs(), start, e);
                         double prob = rule.getProb();
                         double inside = inside(rule.getRhs()[1], end + 1, e);
+                        System.err.println("Old Part1 " + part1);
                         part1 += outside * inside * prob;
+                        System.err.println("New Part1 " + part1);
+
                     }
                 }
             }
@@ -114,6 +118,9 @@ public class InsideOutsideTools {
                         double outside = outside(rule.getLhs(), e, end);
                         double prob = rule.getProb();
                         double inside = inside(rule.getRhs()[0], e, start - 1);
+                        System.err.println("Old Part2 " + part2);
+                        part2 += outside * inside * prob;
+                        System.err.println("New Part2 " + part2);
                     }
                 }
             }
