@@ -12,30 +12,36 @@ import de.up.ling.stud.astar.pcfg.Signature;
 import de.up.ling.tree.Tree;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
+import it.unimi.dsi.fastutil.objects.Object2DoubleOpenHashMap;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
+import edu.stanford.nlp.util.BinaryHeapPriorityQueue;
 
 /**
  *
  * @author gontrum
  */
 public class astarParser {
-    PriorityQueue<Edge> agenda;
-    Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;
-    Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;
-    Set<Edge> workingSet;
+    BinaryHeapPriorityQueue<Edge> agenda;
     Signature<String> signature;
     
+    Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;
+    Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;
+    
+    Set<Edge> workingSet;
+    Object2DoubleMap<Edge> insideMap; //< Log inside score for spans
+    
     private void enqueue(Edge item) {
-        agenda.offer(item);
+        agenda.add(item, item.getWeight());
         workingSet.add(item);
     }
     
     private Edge poll() {
-        return agenda.poll();
+        return agenda.removeFirst();
     }
     
     // Save items from a temporary set to the maps
@@ -60,16 +66,26 @@ public class astarParser {
         }
     }
     
+    private void updateInside(Edge span, double value) {
+        if (insideMap.containsKey(span)) {
+            if (value > insideMap.get(span)) {
+                insideMap.put(span, value);
+            }
+        } else {
+            insideMap.put(span, value);
+        }
+
+    }
+    
+    private double getInside(Edge span) {
+        return insideMap.containsKey(span)? insideMap.get(span) : Double.NEGATIVE_INFINITY;
+    }
+    
     public Tree parse(List<String> words, Pcfg pcfg) {
         /*
             Set up variables
          */
-        agenda = new PriorityQueue<>(100, 
-                (Edge elem1, Edge elem2) -> (elem1.getWeight() == elem2.getWeight()) 
-                ? 0             // elements are equal
-                : (elem1.getWeight() < elem2.getWeight()
-                        ? 0             // elem1 is smaller
-                        : 1));
+        agenda = new BinaryHeapPriorityQueue<>();
         
         seenItemsByEndPosition = new Int2ObjectOpenHashMap<>();
         seenItemsByEndPosition.defaultReturnValue(new HashSet<>());
@@ -77,6 +93,9 @@ public class astarParser {
         seenItemsByStartPosition.defaultReturnValue(new HashSet<>());
         
         workingSet = new HashSet<>();
+        
+        insideMap = new Object2DoubleOpenHashMap<>();
+        insideMap.defaultReturnValue(Double.NEGATIVE_INFINITY);
         
         int n = words.size();
         
@@ -94,7 +113,10 @@ public class astarParser {
             
             for (Rule r : pcfg.getRules(rhs)) {
 //                System.err.println("-> " +r.getLhs());
-                enqueue(new Edge(r.getLhs(), i, i+1, null, null));
+                Edge edge = new Edge(r.getLhs(), i, i+1, null, null);
+                
+                updateInside(edge, Math.log(r.getProb()));
+                enqueue(edge);
             }
     
         }
@@ -115,7 +137,14 @@ public class astarParser {
                 rhs[1] = item.getSymbol();
                 
                 pcfg.getRules(rhs).stream().forEach((r) -> {
-                    enqueue(new Edge(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item));
+                    Edge edge = new Edge(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item);
+                    
+                    double insideLeft = getInside(candidate);
+                    double insideRight = getInside(item);
+                    double newInside = insideLeft + insideRight + Math.log(r.getProb());
+                    updateInside(edge, newInside);
+                    
+                    enqueue(edge);
                 });
             });
             
@@ -125,7 +154,8 @@ public class astarParser {
                 rhs[1] = candidate.getSymbol();
 
                 pcfg.getRules(rhs).stream().forEach((r) -> {
-                    enqueue(new Edge(r.getLhs(), item.getBegin(), candidate.getEnd(), item, candidate));
+                    Edge edge = new Edge(r.getLhs(), item.getBegin(), candidate.getEnd(), item, candidate);
+                    enqueue(edge);
                 });
             });
             
@@ -190,7 +220,7 @@ public class astarParser {
             return end;
         }
         
-        public int getWeight() {
+        public double getWeight() {
             return getLength();
         }
         

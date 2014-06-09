@@ -34,6 +34,9 @@ public class InsideOutsideTools {
         this.sig = grammar.getSignature();
     }
     
+    public double b(int symbol, int start, int end) { 
+        return 0.0;
+    }
     
     public double inside(int symbol, int start, int end) {
        

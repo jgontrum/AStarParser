@@ -32,8 +32,8 @@ public class App
         
 
         Pcfg pcfg;
-        pcfg = PcfgParser.parse(new StringReader(grammar));
-        pcfg = PcfgParser.parse(new FileReader(new File("grammar.txt")));
+//        pcfg = PcfgParser.parse(new StringReader(grammar));
+        pcfg = PcfgParser.parse(new FileReader(new File("examples/grammar.txt")));
         
         String sentence;
         sentence = "Hans mag den Baum";
