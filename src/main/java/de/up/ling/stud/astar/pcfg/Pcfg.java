@@ -276,6 +276,10 @@ public class Pcfg {
         return this.signature;
     }
     
+    public boolean isNonterminal(int symbol) {
+        return this.nonTerminals.contains(symbol);
+    }
+    
     /**
      * Returns a collection of Rules for a given sequence of symbols,
      * representing the rhs of a rule.

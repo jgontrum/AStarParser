@@ -155,6 +155,12 @@ public class astarParser {
 
                 pcfg.getRules(rhs).stream().forEach((r) -> {
                     Edge edge = new Edge(r.getLhs(), item.getBegin(), candidate.getEnd(), item, candidate);
+                    
+                    double insideLeft = getInside(item);
+                    double insideRight = getInside(candidate);
+                    double newInside = insideLeft + insideRight + Math.log(r.getProb());
+                    updateInside(edge, newInside);
+                    
                     enqueue(edge);
                 });
             });
