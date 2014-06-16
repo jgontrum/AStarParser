@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
 import edu.stanford.nlp.util.BinaryHeapPriorityQueue;
+import java.awt.GraphicsConfigTemplate;
 import java.util.Arrays;
 
 /**
@@ -38,6 +39,9 @@ public class astarParser {
     private Set<Edge> workingSet;
     private Object2DoubleMap<Edge> insideMap; //< Log inside score for spans
     
+    private int n;
+    private Pcfg pcfg;
+    
     private Summarizer summarizer;
     
     private void enqueue(Edge item, double weight) {
@@ -51,7 +55,7 @@ public class astarParser {
     }
     
     // Save items from a temporary set to the maps
-    private void flush() { 
+    private boolean flush() { 
         for (Edge item : workingSet) {
             // Save by end
             if (seenItemsByEndPosition.containsKey(item.getEnd())) {
@@ -69,7 +73,10 @@ public class astarParser {
                 insert.add(item);
                 seenItemsByStartPosition.put(item.getBegin(), insert);
             }
+            
+            if (isStartItem(item)) return true;
         }
+        return false;
     }
     
     private void updateInside(Edge span, double value) {
@@ -104,8 +111,9 @@ public class astarParser {
         insideMap = new Object2DoubleOpenHashMap<>();
         insideMap.defaultReturnValue(Double.NEGATIVE_INFINITY);
         
-        int n = words.size();
+        n = words.size();
         
+        this.pcfg = pcfg;
         signature = pcfg.getSignature();
         
         summarizer = new SXEstimate(pcfg);
@@ -140,7 +148,7 @@ public class astarParser {
         int edgeCounter = 0;
         while (!agenda.isEmpty()) { 
             ++edgeCounter;
-            flush();
+            if (flush()) break;
             Edge item = poll();
 //            System.err.println("Current Item: " + item.toStringReadable(signature));
             
@@ -195,12 +203,16 @@ public class astarParser {
         
         // Find final item and create a parse tree
         for (Edge finalItem : seenItemsByEndPosition.get(n)) {
-            if (finalItem.getEnd() == n && finalItem.getBegin() == 0 && finalItem.getSymbol() == pcfg.getStartSymbol()) {
+            if (isStartItem(finalItem)) {
                 return createParseTree(finalItem);
             }
         }
         
         return null;
+    }
+    
+    private boolean isStartItem(Edge item) {
+        return item.getEnd() == n && item.getBegin() == 0 && item.getSymbol() == pcfg.getStartSymbol();
     }
 
     
