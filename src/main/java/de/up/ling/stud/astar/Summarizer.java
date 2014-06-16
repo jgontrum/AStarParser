@@ -8,6 +8,7 @@ package de.up.ling.stud.astar;
 
 import de.up.ling.stud.astar.pcfg.Pcfg;
 import de.up.ling.stud.astar.pcfg.Signature;
+import java.util.List;
 
 /**
  *
@@ -17,13 +18,12 @@ public abstract class Summarizer {
     protected final Signature signature;
     protected final Pcfg grammar;
     
-    public Summarizer(Pcfg grammar) {
+    Summarizer(Pcfg grammar) {
         this.grammar = grammar;
         this.signature = grammar.getSignature();
     }
+
+    abstract double evaluate(Edge edge, List<String> sentence);    
     
-    abstract double outside(int state, int lspan, int rspan);
-    
-    abstract double inside(int state, int span);
 
 }

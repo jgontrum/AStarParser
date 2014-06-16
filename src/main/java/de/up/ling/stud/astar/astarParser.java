@@ -20,24 +20,30 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
 import edu.stanford.nlp.util.BinaryHeapPriorityQueue;
+import java.util.Arrays;
 
 /**
  *
  * @author gontrum
  */
 public class astarParser {
-    BinaryHeapPriorityQueue<Edge> agenda;
-    Signature<String> signature;
+    private BinaryHeapPriorityQueue<Edge> agenda;
+    private Signature<String> signature;
     
-    Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;
-    Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;
+    private Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;
+    private Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;
     
-    Set<Edge> workingSet;
-    Object2DoubleMap<Edge> insideMap; //< Log inside score for spans
+    private Set<Edge> competedEdges; //< Do not process the same edge more than one time
     
-    private void enqueue(Edge item) {
-        agenda.add(item, item.getWeight());
+    private Set<Edge> workingSet;
+    private Object2DoubleMap<Edge> insideMap; //< Log inside score for spans
+    
+    private Summarizer summarizer;
+    
+    private void enqueue(Edge item, double weight) {
+        agenda.add(item, weight);
         workingSet.add(item);
+        competedEdges.add(item);
     }
     
     private Edge poll() {
@@ -92,6 +98,7 @@ public class astarParser {
         seenItemsByStartPosition = new Int2ObjectOpenHashMap<>();
         seenItemsByStartPosition.defaultReturnValue(new HashSet<>());
         
+        competedEdges = new HashSet<>();
         workingSet = new HashSet<>();
         
         insideMap = new Object2DoubleOpenHashMap<>();
@@ -100,6 +107,8 @@ public class astarParser {
         int n = words.size();
         
         signature = pcfg.getSignature();
+        
+        summarizer = new SXEstimate(pcfg);
         
         /*
             Create startitems
@@ -112,11 +121,15 @@ public class astarParser {
 //            System.err.println(words.get(i));
             
             for (Rule r : pcfg.getRules(rhs)) {
-//                System.err.println("-> " +r.getLhs());
+//                System.err.println("-> " +r.toString(signature));
                 Edge edge = new Edge(r.getLhs(), i, i+1, null, null);
                 
-                updateInside(edge, Math.log(r.getProb()));
-                enqueue(edge);
+                double inside = Math.log(r.getProb());
+                double outsideEstimate = summarizer.evaluate(edge, words);
+                
+                updateInside(edge, inside);
+                
+                enqueue(edge, inside + outsideEstimate);
             }
     
         }
@@ -138,13 +151,18 @@ public class astarParser {
                 
                 pcfg.getRules(rhs).stream().forEach((r) -> {
                     Edge edge = new Edge(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item);
-                    
-                    double insideLeft = getInside(candidate);
-                    double insideRight = getInside(item);
-                    double newInside = insideLeft + insideRight + Math.log(r.getProb());
-                    updateInside(edge, newInside);
-                    
-                    enqueue(edge);
+
+                    if (!competedEdges.contains(edge)) {
+                        double insideLeft = getInside(candidate);
+                        double insideRight = getInside(item);
+                        double newInside = insideLeft + insideRight + Math.log(r.getProb());
+
+                        double outsideEstimate = summarizer.evaluate(edge, words); 
+                        
+                        updateInside(edge, newInside);
+                        enqueue(edge, newInside + outsideEstimate);
+                    }
+
                 });
             });
             
@@ -156,12 +174,17 @@ public class astarParser {
                 pcfg.getRules(rhs).stream().forEach((r) -> {
                     Edge edge = new Edge(r.getLhs(), item.getBegin(), candidate.getEnd(), item, candidate);
                     
-                    double insideLeft = getInside(item);
-                    double insideRight = getInside(candidate);
-                    double newInside = insideLeft + insideRight + Math.log(r.getProb());
-                    updateInside(edge, newInside);
-                    
-                    enqueue(edge);
+                    if (!competedEdges.contains(edge)) {
+                        double insideLeft = getInside(item);
+                        double insideRight = getInside(candidate);
+                        double newInside = insideLeft + insideRight + Math.log(r.getProb());
+                        
+                        double outsideEstimate = summarizer.evaluate(edge, words);
+
+                        updateInside(edge, newInside);
+                        enqueue(edge, newInside + outsideEstimate);                        
+                    }
+
                 });
             });
             
@@ -194,90 +217,4 @@ public class astarParser {
         return Tree.create(signature.getSymbolForId(item.getSymbol()), children);
     }
     
-    static private class Edge {
-        int symbol;
-        int begin;
-        int end;
-        Edge[] childs;
-        
-
-        public Edge(int symbol, int begin, int end, Edge child1, Edge child2) {
-            this.symbol = symbol;
-            this.begin = begin;
-            this.end = end;
-            childs = new Edge[2];
-            childs[0] = child1;
-            childs[1] = child2;
-        }
-
-        public int getLength() {
-            return  end - begin;
-        }
-
-        public int getSymbol() {
-            return symbol;
-        }
-
-        public int getBegin() {
-            return begin;
-        }
-
-        public int getEnd() {
-            return end;
-        }
-        
-        public double getWeight() {
-            return getLength();
-        }
-        
-        public Edge getFirstChild() { 
-            return childs[0];
-        }
-        
-        public Edge getSecondChild() {
-            return childs[1];
-        }
-        
-        @Override
-        public int hashCode() {
-            int hash = 5;
-            hash = 29 * hash + this.symbol;
-            hash = 29 * hash + this.begin;
-            hash = 29 * hash + this.end;
-            return hash;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            final Edge other = (Edge) obj;
-            if (this.symbol != other.symbol) {
-                return false;
-            }
-            if (this.begin != other.begin) {
-                return false;
-            }
-            if (this.end != other.end) {
-                return false;
-            }
-            return true;
-        }
-
-        @Override
-        public String toString() {
-            return "<" + symbol + "," + begin + "," + end + ">";
-        }
-        
-        public String toStringReadable(Signature signature) {
-            return "<" + signature.getSymbolForId(symbol) + "," + begin + "," + end + ">()";
-        }
-        
-        
-        
-    }
 }

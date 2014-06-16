@@ -3,6 +3,7 @@ package de.up.ling.stud.astar;
 import de.up.ling.stud.astar.pcfg.ParseException;
 import de.up.ling.stud.astar.pcfg.Pcfg;
 import de.up.ling.stud.astar.pcfg.PcfgParser;
+import de.up.ling.tree.Tree;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import java.io.File;
@@ -48,16 +49,10 @@ public class App
             wordsDecoded.add(pcfg.getSignature().addSymbol(currentWord));
         }
         System.err.println(inputWord);
-//
-//        InsideOutsideTools iot = new InsideOutsideTools(pcfg, wordsDecoded);
-//        
-//        System.err.println(iot.inside(pcfg.getStartSymbol(), 0, wordsDecoded.size() -1 ));
-//        wordsDecoded.rem(0);
-//                wordsDecoded.rem(0);
-//
-//        System.err.println(iot.outside(pcfg.getSignature().getIdforSymbol("VP"), 1, wordsDecoded.size() - 1));
 
-        astarParser parser = new astarParser();    
-        System.err.println(parser.parse(inputWord, pcfg));
+        astarParser parser = new astarParser();
+        Tree res = parser.parse(inputWord, pcfg);
+        System.err.println(res);
+        if (res != null) res.draw();
     }
 }
