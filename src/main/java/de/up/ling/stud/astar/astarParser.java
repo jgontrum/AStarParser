@@ -10,48 +10,55 @@ import de.up.ling.stud.astar.pcfg.Pcfg;
 import de.up.ling.stud.astar.pcfg.Rule;
 import de.up.ling.stud.astar.pcfg.Signature;
 import de.up.ling.tree.Tree;
+import edu.stanford.nlp.util.BinaryHeapPriorityQueue;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
-import it.unimi.dsi.fastutil.objects.Object2DoubleOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2DoubleMap;
+import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.PriorityQueue;
 import java.util.Set;
-import edu.stanford.nlp.util.BinaryHeapPriorityQueue;
-import java.awt.GraphicsConfigTemplate;
-import java.util.Arrays;
 
 /**
  *
  * @author gontrum
  */
 public class astarParser {
-    private BinaryHeapPriorityQueue<Edge> agenda;
-    private Signature<String> signature;
+    private BinaryHeapPriorityQueue<Edge> agenda;       // The driving agenda as a Stanford priority queue
+    private Signature<String> signature;                // Signature from the grammar to translate symbol IDs to strings
     
-    private Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;
-    private Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;
+    private Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;  // This represents our chart for the CKY parser
+    private Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;    // Dito.
     
-    private Set<Edge> competedEdges; //< Do not process the same edge more than one time
+    private LongSet completedEdges; // Stores all edges, that have been taken from the agenda, to prevent putting them back on it again. 
+                                    // The edges are strored as along value, containing their symbol, begin and end.
     
-    private Set<Edge> workingSet;
-    private Object2DoubleMap<Edge> insideMap; //< Log inside score for spans
+    private List<Edge> workingSet;      // Save all newly created edges here so we do not change the chart while iterating over it.
+    private Long2DoubleMap insideMap;   // Log inside score for edges. Using the long encoding of the edges.
     
-    private int n;
-    private Pcfg pcfg;
+    private int n;                      // The length of the current sentence
+    private Pcfg pcfg;                  // The grammar to parse the current sentence with
     
-    private Summarizer summarizer;
+    private Summarizer summarizer;      // An object of a summarizer, e.g. SXSummary
     
+    // Put an edge on the agenda if needed
     private void enqueue(Edge item, double weight) {
-        agenda.add(item, weight);
-        workingSet.add(item);
-        competedEdges.add(item);
+        if (agenda.contains(item)) {
+            agenda.decreasePriority(item, weight);
+        } else {
+            agenda.add(item, weight); 
+            workingSet.add(item);
+        }
     }
     
-    private Edge poll() {
-        return agenda.removeFirst();
+    // Take an edge from the agenda and mark it as completed
+    private Edge dequeue() {
+        Edge ret = agenda.removeFirst();
+        completedEdges.add(ret.asLongEncoding());
+        return ret;
     }
     
     // Save items from a temporary set to the maps
@@ -79,22 +86,25 @@ public class astarParser {
         return false;
     }
     
+    // Update the inside value of an edge
     private void updateInside(Edge span, double value) {
-        if (insideMap.containsKey(span)) {
-            if (value > insideMap.get(span)) {
-                insideMap.put(span, value);
+        long spanAsLong = span.asLongEncoding();
+        if (insideMap.containsKey(spanAsLong)) {
+            if (value > insideMap.get(spanAsLong)) {
+                insideMap.put(spanAsLong, value);
             }
         } else {
-            insideMap.put(span, value);
+            insideMap.put(spanAsLong, value);
         }
-
     }
     
+    // Returns the inside value of an edge
     private double getInside(Edge span) {
-        return insideMap.containsKey(span)? insideMap.get(span) : Double.NEGATIVE_INFINITY;
+        long spanAsLong = span.asLongEncoding();
+        return insideMap.containsKey(spanAsLong)? insideMap.get(spanAsLong) : Double.NEGATIVE_INFINITY;
     }
     
-    public Tree parse(List<String> words, Pcfg pcfg) {
+    public Tree parse(List<String> words, Pcfg grammar) {
         /*
             Set up variables
          */
@@ -105,23 +115,21 @@ public class astarParser {
         seenItemsByStartPosition = new Int2ObjectOpenHashMap<>();
         seenItemsByStartPosition.defaultReturnValue(new HashSet<>());
         
-        competedEdges = new HashSet<>();
-        workingSet = new HashSet<>();
+        completedEdges = new LongOpenHashSet();
+        workingSet = new ArrayList<>();
         
-        insideMap = new Object2DoubleOpenHashMap<>();
+        insideMap = new Long2DoubleOpenHashMap();
         insideMap.defaultReturnValue(Double.NEGATIVE_INFINITY);
-        
-        n = words.size();
-        
-        this.pcfg = pcfg;
+                
+        pcfg = grammar;
         signature = pcfg.getSignature();
         
+        n = words.size();
         summarizer = new SXEstimate(pcfg);
         
         /*
             Create startitems
         */
-        
         for (int i = 0; i < n; i++) {
             int[] rhs = new int[1];
             rhs[0] = signature.getIdforSymbol(words.get(i));
@@ -149,7 +157,7 @@ public class astarParser {
         while (!agenda.isEmpty()) { 
             ++edgeCounter;
             if (flush()) break;
-            Edge item = poll();
+            Edge item = dequeue();
 //            System.err.println("Current Item: " + item.toStringReadable(signature));
             
             seenItemsByEndPosition.get(item.getBegin()).stream().forEach((candidate) -> {
@@ -160,7 +168,7 @@ public class astarParser {
                 pcfg.getRules(rhs).stream().forEach((r) -> {
                     Edge edge = new Edge(r.getLhs(), candidate.getBegin(), item.getEnd(), candidate, item);
 
-                    if (!competedEdges.contains(edge)) {
+                    if (!completedEdges.contains(edge.asLongEncoding())) {
                         double insideLeft = getInside(candidate);
                         double insideRight = getInside(item);
                         double newInside = insideLeft + insideRight + Math.log(r.getProb());
@@ -182,7 +190,7 @@ public class astarParser {
                 pcfg.getRules(rhs).stream().forEach((r) -> {
                     Edge edge = new Edge(r.getLhs(), item.getBegin(), candidate.getEnd(), item, candidate);
                     
-                    if (!competedEdges.contains(edge)) {
+                    if (!completedEdges.contains(edge.asLongEncoding())) {
                         double insideLeft = getInside(item);
                         double insideRight = getInside(candidate);
                         double newInside = insideLeft + insideRight + Math.log(r.getProb());

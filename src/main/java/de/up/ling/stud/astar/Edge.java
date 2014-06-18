@@ -28,10 +28,6 @@ class Edge {
         childs[1] = child2;
     }
 
-    public int getLength() {
-        return end - begin;
-    }
-
     public int getSymbol() {
         return symbol;
     }
@@ -50,6 +46,10 @@ class Edge {
 
     public Edge getSecondChild() {
         return childs[1];
+    }
+    
+    public long asLongEncoding() {
+        return ((long) symbol << 32) | (0xFFFFFFFFL & (begin << 16 | end));
     }
 
     @Override
@@ -85,6 +85,7 @@ class Edge {
         }
         return true;
     }
+    
     public String toString() {
         return "<" + symbol + "," + begin + "," + end + ">";
     }
