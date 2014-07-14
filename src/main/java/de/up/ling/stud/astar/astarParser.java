@@ -26,17 +26,17 @@ import java.util.Set;
  *
  * @author gontrum
  */
-public class astarParser {
+public class astarParser   {
     private BinaryHeapPriorityQueue<Edge> agenda;       // The driving agenda as a Stanford priority queue
     private Signature<String> signature;                // Signature from the grammar to translate symbol IDs to strings
     
-    private Int2ObjectMap<Set<Edge>> seenItemsByStartPosition;  // This represents our chart for the CKY parser
-    private Int2ObjectMap<Set<Edge>> seenItemsByEndPosition;    // Dito.
+    private Int2ObjectMap<List<Edge>> seenItemsByStartPosition;  // This represents our chart for the CKY parser
+    private Int2ObjectMap<List<Edge>> seenItemsByEndPosition;    // Dito.
     
     private LongSet completedEdges; // Stores all edges, that have been taken from the agenda, to prevent putting them back on it again. 
                                     // The edges are strored as along value, containing their symbol, begin and end.
     
-    private List<Edge> workingSet;      // Save all newly created edges here so we do not change the chart while iterating over it.
+    private List<Edge> edgeStorage;      // Save all newly created edges here so we do not change the chart while iterating over it.
     private Long2DoubleMap insideMap;   // Log inside score for edges. Using the long encoding of the edges.
     
     private int n;                      // The length of the current sentence
@@ -50,7 +50,7 @@ public class astarParser {
             agenda.decreasePriority(item, weight);
         } else {
             agenda.add(item, weight); 
-            workingSet.add(item);
+            edgeStorage.add(item);
         }
     }
     
@@ -63,12 +63,12 @@ public class astarParser {
     
     // Save items from a temporary set to the maps
     private boolean flush() { 
-        for (Edge item : workingSet) {
+        for (Edge item : edgeStorage) {
             // Save by end
             if (seenItemsByEndPosition.containsKey(item.getEnd())) {
                 seenItemsByEndPosition.get(item.getEnd()).add(item);
             } else {
-                Set<Edge> insert = new HashSet<>();
+                List<Edge> insert = new ArrayList<>();
                 insert.add(item);
                 seenItemsByEndPosition.put(item.getEnd(), insert);
             }
@@ -76,7 +76,7 @@ public class astarParser {
             if (seenItemsByStartPosition.containsKey(item.getBegin())) {
                 seenItemsByStartPosition.get(item.getBegin()).add(item);
             } else {
-                Set<Edge> insert = new HashSet<>();
+                List<Edge> insert = new ArrayList<>();
                 insert.add(item);
                 seenItemsByStartPosition.put(item.getBegin(), insert);
             }
@@ -104,19 +104,19 @@ public class astarParser {
         return insideMap.containsKey(spanAsLong)? insideMap.get(spanAsLong) : Double.NEGATIVE_INFINITY;
     }
     
-    public Tree parse(List<String> words, Pcfg grammar) {
+    public Tree<String> parse(List<String> words, Pcfg grammar) {
         /*
             Set up variables
          */
         agenda = new BinaryHeapPriorityQueue<>();
         
         seenItemsByEndPosition = new Int2ObjectOpenHashMap<>();
-        seenItemsByEndPosition.defaultReturnValue(new HashSet<>());
+        seenItemsByEndPosition.defaultReturnValue(new ArrayList<>());
         seenItemsByStartPosition = new Int2ObjectOpenHashMap<>();
-        seenItemsByStartPosition.defaultReturnValue(new HashSet<>());
+        seenItemsByStartPosition.defaultReturnValue(new ArrayList<>());
         
         completedEdges = new LongOpenHashSet();
-        workingSet = new ArrayList<>();
+        edgeStorage = new ArrayList<>();
         
         insideMap = new Long2DoubleOpenHashMap();
         insideMap.defaultReturnValue(Double.NEGATIVE_INFINITY);
@@ -134,10 +134,10 @@ public class astarParser {
             int[] rhs = new int[1];
             rhs[0] = signature.getIdforSymbol(words.get(i));
             
-//            System.err.println(words.get(i));
-            
+//            System.err.println("Current word: " + words.get(i) +  "\twith ID: "+ rhs[0]);
+            boolean found = false;
             for (Rule r : pcfg.getRules(rhs)) {
-//                System.err.println("-> " +r.toString(signature));
+                found = true;
                 Edge edge = new Edge(r.getLhs(), i, i+1, null, null);
                 
                 double inside = Math.log(r.getProb());
@@ -147,6 +147,7 @@ public class astarParser {
                 
                 enqueue(edge, inside + outsideEstimate);
             }
+            System.err.println(found? "Found! " : "Not found...");
     
         }
         
@@ -206,7 +207,7 @@ public class astarParser {
             
         }
         
-        System.err.println("Edges: " + edgeCounter);
+//        System.err.println("Edges: " + edgeCounter);
         
         
         // Find final item and create a parse tree
